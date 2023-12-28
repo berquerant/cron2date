@@ -18,7 +18,7 @@ jobs:
     strategy:
       matrix:
         go-version:
-          - "{{ cookiecutter.go_version }}"
+          - "1.21"
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.1

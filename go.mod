@@ -6,7 +6,7 @@ require (
 	github.com/berquerant/goconfig v0.3.0
 	github.com/robfig/cron v1.2.0
 	github.com/stretchr/testify v1.8.4
-	golang.org/x/vuln v1.0.3
+	golang.org/x/vuln v1.0.4
 )
 
 require (

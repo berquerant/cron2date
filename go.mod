@@ -5,7 +5,7 @@ go 1.21
 require (
 	github.com/berquerant/goconfig v0.3.0
 	github.com/robfig/cron v1.2.0
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 	golang.org/x/vuln v1.0.4
 )
 

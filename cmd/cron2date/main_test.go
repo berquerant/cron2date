@@ -61,7 +61,6 @@ func TestEndToEnd(t *testing.T) {
 `,
 		},
 	} {
-		tc := tc
 		t.Run(tc.title, func(t *testing.T) {
 			out, err := output(e.cmd, tc.arg...)
 			assert.Nil(t, err)

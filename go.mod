@@ -1,6 +1,6 @@
 module github.com/berquerant/cron2date
 
-go 1.21
+go 1.23
 
 require (
 	github.com/berquerant/goconfig v0.3.0

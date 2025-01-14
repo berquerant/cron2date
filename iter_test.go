@@ -1,6 +1,8 @@
 package cron2date_test
 
 import (
+	"iter"
+	"slices"
 	"testing"
 	"time"
 
@@ -22,8 +24,8 @@ func TestIterator(t *testing.T) {
 		nexter = cron2date.NextFunc(func(t time.Time) time.Time {
 			return t.Add(time.Hour)
 		})
-		mustNewIterator = func(opt ...cron2date.Option) cron2date.Iterator {
-			iter, err := cron2date.NewIteratorImpl(nexter, opt...)
+		mustNewIterator = func(opt ...cron2date.Option) iter.Seq[time.Time] {
+			iter, err := cron2date.NewIterator(nexter, opt...)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -34,7 +36,7 @@ func TestIterator(t *testing.T) {
 
 	for _, tc := range []struct {
 		title string
-		iter  cron2date.Iterator
+		iter  iter.Seq[time.Time]
 		want  []time.Time
 	}{
 		{
@@ -68,11 +70,11 @@ func TestIterator(t *testing.T) {
 			want:  genNext(3),
 		},
 	} {
-		tc := tc
 		t.Run(tc.title, func(t *testing.T) {
-			got := []time.Time{}
-			for tc.iter.Next() {
-				got = append(got, tc.iter.Time())
+			got := slices.Collect(tc.iter)
+			if len(tc.want) == 0 {
+				assert.Equal(t, 0, len(got))
+				return
 			}
 			assert.Equal(t, tc.want, got)
 		})
@@ -107,9 +109,8 @@ func TestIterator(t *testing.T) {
 				opt:   []cron2date.Option{start, cron2date.WithEnd(year3000)},
 			},
 		} {
-			tc := tc
 			t.Run(tc.title, func(t *testing.T) {
-				_, err := cron2date.NewIteratorImpl(nexter, tc.opt...)
+				_, err := cron2date.NewIterator(nexter, tc.opt...)
 				assert.Equal(t, tc.isErr, err != nil, "got %v", err)
 			})
 		}

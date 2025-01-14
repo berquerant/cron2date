@@ -71,7 +71,7 @@ func main() {
 	nexter, err := cron2date.NewNexter(cronExpr)
 	fail(err, "parse cronexpr %s", cronExpr)
 
-	iter, err := cron2date.NewIteratorImpl(
+	iter, err := cron2date.NewIterator(
 		nexter,
 		cron2date.WithStart(start),
 		cron2date.WithCount(*count),
@@ -80,7 +80,7 @@ func main() {
 	)
 	fail(err, "validate")
 
-	for iter.Next() {
-		fmt.Printf("%s\n", iter.Time().Format(*timeFormat))
+	for x := range iter {
+		fmt.Printf("%s\n", x.Format(*timeFormat))
 	}
 }

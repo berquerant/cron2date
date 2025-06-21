@@ -48,7 +48,7 @@ func NewIterator(nexter Nexter, opt ...Option) (iter.Seq[time.Time], error) {
 	}, nil
 }
 
-//go:generate go run github.com/berquerant/goconfig -field "Start time.Time|Count int|Duration time.Duration|End time.Time" -option -configOption Option -output iter_config_generated.go
+//go:generate go tool goconfig -field "Start time.Time|Count int|Duration time.Duration|End time.Time" -option -configOption Option -output iter_config_generated.go
 
 var (
 	zeroTime          time.Time

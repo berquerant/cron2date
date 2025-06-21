@@ -29,7 +29,7 @@ init:
 
 .PHONY: vuln
 vuln:
-	go run golang.org/x/vuln/cmd/govulncheck ./...
+	go tool govulncheck ./...
 
 .PHONY: vet
 vet:

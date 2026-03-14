@@ -16,7 +16,7 @@ func TestIterator(t *testing.T) {
 		year3000 = time.Date(3000, 1, 1, 0, 0, 0, 0, time.UTC)
 		genNext  = func(n int) []time.Time {
 			result := make([]time.Time, n)
-			for i := 0; i < n; i++ {
+			for i := range n {
 				result[i] = year2000.Add(time.Duration(i+1) * time.Hour)
 			}
 			return result

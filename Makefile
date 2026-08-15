@@ -27,10 +27,6 @@ test:
 init:
 	$(GOMOD) tidy
 
-.PHONY: vuln
-vuln:
-	go tool govulncheck ./...
-
 .PHONY: vet
 vet:
 	go vet ./...

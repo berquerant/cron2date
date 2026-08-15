@@ -33,8 +33,6 @@ jobs:
         run: make test
       - name: Lint
         run: make vet
-      - name: Vuln
-        run: make vuln
 
   govulncheck:
     timeout-minutes: 5

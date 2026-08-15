@@ -1,6 +1,6 @@
 module github.com/berquerant/cron2date
 
-go 1.26.2
+go 1.26.6
 
 require (
 	github.com/robfig/cron v1.2.0

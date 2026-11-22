@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -24,6 +25,19 @@ func TestEndToEnd(t *testing.T) {
 		out, err := output(e.cmd, "-c", "10", expr)
 		assert.Nil(t, err)
 		assert.Equal(t, 10, strings.Count(out, "\n"), out)
+	})
+
+	t.Run("end without start uses local timezone consistently", func(t *testing.T) {
+		jst := time.FixedZone("Asia/Tokyo", 9*3600)
+		endStr := time.Now().In(jst).Add(2*time.Hour + 30*time.Minute).Format(time.DateTime)
+		cmd := exec.Command(e.cmd, "-e", endStr, expr)
+		cmd.Env = append(os.Environ(), "TZ=Asia/Tokyo")
+		b, err := cmd.Output()
+		assert.NoError(t, err)
+		lines := strings.Count(string(b), "\n")
+		// Within 2h30m, hourly cron ("0 * * * *") fires 2 or 3 times (not 11-12 times as with UTC mismatch).
+		assert.GreaterOrEqual(t, lines, 2, string(b))
+		assert.LessOrEqual(t, lines, 3, string(b))
 	})
 
 	for _, tc := range []struct {

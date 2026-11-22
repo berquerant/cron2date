@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/berquerant/cron2date"
+	"github.com/berquerant/cron2date/internal/cron2date"
 )
 
 const usage = `cron2date - expand cron expression
@@ -53,10 +53,11 @@ func main() {
 
 	var (
 		cronExpr  = flag.Arg(0)
-		start     = time.Now()
+		loc       = time.Local
+		start     = time.Now().In(loc)
 		end       time.Time
 		parseTime = func(s string) time.Time {
-			t, err := time.Parse(*timeFormat, s)
+			t, err := time.ParseInLocation(*timeFormat, s, loc)
 			fail(err, "parse time %s", s)
 			return t
 		}
@@ -71,16 +72,15 @@ func main() {
 	nexter, err := cron2date.NewNexter(cronExpr)
 	fail(err, "parse cronexpr %s", cronExpr)
 
-	iter, err := cron2date.NewIterator(
-		nexter,
-		cron2date.WithStart(start),
-		cron2date.WithCount(*count),
-		cron2date.WithDuration(*duration),
-		cron2date.WithEnd(end),
-	)
+	seq, err := cron2date.NewIterator(nexter, cron2date.Config{
+		Start:    start,
+		Count:    *count,
+		Duration: *duration,
+		End:      end,
+	})
 	fail(err, "validate")
 
-	for x := range iter {
+	for x := range seq {
 		fmt.Printf("%s\n", x.Format(*timeFormat))
 	}
 }

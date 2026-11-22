@@ -20,18 +20,3 @@ Flags:
   -s string
         start time (default current time)
 ```
-
-# date2cron
-
-```
-❯ date2cron -h
-date2cron - convert time to cronexpr
-
-Usage:
-
-  date2cron [flags] [TIME]
-
-Flags:
-  -f string
-        time layout (default "2006-01-02 15:04:05")
-```

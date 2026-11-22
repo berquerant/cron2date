@@ -1,0 +1,83 @@
+package cron2date
+
+import (
+	"errors"
+	"fmt"
+	"iter"
+	"time"
+)
+
+// ErrIteratorConfig indicates an invalid iterator configuration.
+var ErrIteratorConfig = errors.New("IteratorConfig")
+
+// Config configures the firing-time iterator.
+// Start is required, and at least one stop condition must be specified:
+// Count >= 0, Duration >= 0, or a non-zero End.
+type Config struct {
+	Start    time.Time
+	Count    int           // negative value is ignored
+	Duration time.Duration // negative value is ignored
+	End      time.Time
+}
+
+// DefaultConfig returns a Config with unset Count and Duration.
+func DefaultConfig() Config {
+	return Config{
+		Count:    -1,
+		Duration: -1,
+	}
+}
+
+func (c Config) validate() error {
+	if c.Start.IsZero() {
+		return fmt.Errorf("%w: start is required", ErrIteratorConfig)
+	}
+	if c.Count < 0 && c.Duration < 0 && c.End.IsZero() {
+		return fmt.Errorf("%w: either count, duration or end is required", ErrIteratorConfig)
+	}
+	return nil
+}
+
+func (c Config) deadline() (time.Time, bool) {
+	var d time.Time
+	has := false
+	if c.Duration >= 0 {
+		d = c.Start.Add(c.Duration)
+		has = true
+	}
+	if !c.End.IsZero() && (!has || c.End.Before(d)) {
+		d = c.End
+		has = true
+	}
+	return d, has
+}
+
+// NewIterator returns a reusable, stateless iterator yielding firing times
+// strictly after cfg.Start until the configured stop condition is reached.
+func NewIterator(nexter Nexter, cfg Config) (iter.Seq[time.Time], error) {
+	if nexter == nil {
+		return nil, fmt.Errorf("%w: nexter is required", ErrIteratorConfig)
+	}
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+
+	deadline, hasDeadline := cfg.deadline()
+
+	return func(yield func(time.Time) bool) {
+		current := cfg.Start
+		for count := 0; cfg.Count < 0 || count < cfg.Count; count++ {
+			next := nexter.Next(current)
+			if next.IsZero() || !next.After(current) {
+				return
+			}
+			if hasDeadline && next.After(deadline) {
+				return
+			}
+			current = next
+			if !yield(current) {
+				return
+			}
+		}
+	}, nil
+}

@@ -21,6 +21,7 @@ const usage = `cron2date - expand cron expression
 Usage:
 
   cron2date [flags] CRONEXPR
+  cron2date -mcp
 
 Flags:`
 
@@ -125,7 +126,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, now func(
 			_ = w.Flush()
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "%s\n", x.Format(prepared.Format)); err != nil {
+		if _, err := fmt.Fprintf(w, "%s\n", x.In(prepared.Location).Format(prepared.Format)); err != nil {
 			return err
 		}
 	}

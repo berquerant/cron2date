@@ -173,7 +173,7 @@ func (h *handlers) expandCron(
 			truncated = true
 			break
 		}
-		times = append(times, x.Format(prepared.Format))
+		times = append(times, x.In(prepared.Location).Format(prepared.Format))
 	}
 
 	return nil, ExpandCronOutput{
@@ -212,7 +212,7 @@ func (h *handlers) validateCron(
 	next := nexter.Next(start)
 	nextFire := ""
 	if !next.IsZero() {
-		nextFire = next.Format(layout)
+		nextFire = next.In(loc).Format(layout)
 	}
 
 	return nil, ValidateCronOutput{

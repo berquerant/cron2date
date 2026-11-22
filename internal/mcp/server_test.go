@@ -216,5 +216,47 @@ func TestMCPServer(t *testing.T) {
 		unmatchableOut := decodeStructured[cronmcp.ValidateCronOutput](t, unmatchableRes)
 		assert.True(t, unmatchableOut.Valid)
 		assert.Empty(t, unmatchableOut.NextFire)
+
+		secRes, err := session.CallTool(ctx, &mcp.CallToolParams{
+			Name: "validate_cron",
+			Arguments: map[string]any{
+				"expr":     "*/15 * * * * *",
+				"start":    "2026-06-01 10:00:00",
+				"timezone": "UTC",
+				"seconds":  true,
+			},
+		})
+		require.NoError(t, err)
+		assert.False(t, secRes.IsError)
+		secOut := decodeStructured[cronmcp.ValidateCronOutput](t, secRes)
+		assert.True(t, secOut.Valid)
+		assert.Equal(t, "2026-06-01 10:00:15", secOut.NextFire)
+
+		cronTZRes, err := session.CallTool(ctx, &mcp.CallToolParams{
+			Name: "validate_cron",
+			Arguments: map[string]any{
+				"expr":     "CRON_TZ=UTC 0 12 * * *",
+				"timezone": "Asia/Tokyo",
+				"format":   time.RFC3339,
+			},
+		})
+		require.NoError(t, err)
+		assert.False(t, cronTZRes.IsError)
+		cronTZOut := decodeStructured[cronmcp.ValidateCronOutput](t, cronTZRes)
+		assert.True(t, cronTZOut.Valid)
+		assert.Equal(t, "Asia/Tokyo", cronTZOut.Timezone)
+		assert.Equal(t, "2026-06-01T21:00:00+09:00", cronTZOut.NextFire)
+
+		for _, badArgs := range []map[string]any{
+			{"expr": "0 * * * *", "timezone": "Invalid/Zone"},
+			{"expr": "0 * * * *", "start": "not-a-time"},
+		} {
+			errRes, err := session.CallTool(ctx, &mcp.CallToolParams{
+				Name:      "validate_cron",
+				Arguments: badArgs,
+			})
+			require.NoError(t, err)
+			assert.True(t, errRes.IsError)
+		}
 	})
 }

@@ -1,6 +1,6 @@
 # cron2date
 
-CLI tool to expand cron expressions into concrete firing timestamps.
+CLI tool and stdio MCP server to expand cron expressions into concrete firing timestamps.
 
 ## Install
 
@@ -10,13 +10,14 @@ go install github.com/berquerant/cron2date/cmd/cron2date@latest
 
 ## Usage
 
-```
+```text
 ❯ cron2date -h
 cron2date - expand cron expression
 
 Usage:
 
   cron2date [flags] CRONEXPR
+  cron2date -mcp
 
 Flags:
   -c int
@@ -54,9 +55,9 @@ cron2date -tz Asia/Tokyo -f "2006-01-02T15:04:05Z07:00" -c 3 "0 9 * * *"
 # 6-field cron expression with seconds
 cron2date -seconds -s "2026-06-01 10:00:00" -c 3 "*/15 * * * * *"
 
-# Descriptors and CRON_TZ prefix (supported via robfig/cron/v3)
+# Descriptors and CRON_TZ prefix (output converted to -tz / local timezone)
 cron2date -c 3 "@daily"
-cron2date -c 3 "CRON_TZ=UTC 0 0 * * *"
+cron2date -tz Asia/Tokyo -c 3 "CRON_TZ=UTC 0 0 * * *"
 ```
 
 ## MCP Server
@@ -64,7 +65,9 @@ cron2date -c 3 "CRON_TZ=UTC 0 0 * * *"
 Run `cron2date -mcp` to start a stdio MCP server exposing two read-only tools:
 
 - `expand_cron`: expand a cron expression into concrete firing timestamps (capped at 1000 results per call).
+  - Parameters: `expr` (required), `start`, `end`, `count`, `duration`, `format`, `timezone`, `seconds`
 - `validate_cron`: validate a cron expression and preview its next firing timestamp.
+  - Parameters: `expr` (required), `start`, `format`, `timezone`, `seconds`
 
 Example MCP client configuration:
 

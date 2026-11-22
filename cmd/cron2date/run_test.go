@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -11,16 +12,34 @@ import (
 )
 
 func TestRun(t *testing.T) {
+	ctx := context.Background()
 	fixedNow := func() time.Time {
 		return time.Date(2026, 6, 1, 10, 0, 0, 0, time.Local)
 	}
 
 	t.Run("help", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		err := run([]string{"-h"}, &stdout, &stderr, fixedNow)
+		err := run(ctx, []string{"-h"}, &stdout, &stderr, fixedNow)
 		require.NoError(t, err)
 		assert.Empty(t, stdout.String())
 		assert.Contains(t, stderr.String(), "cron2date - expand cron expression")
+	})
+
+	t.Run("version", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		err := run(ctx, []string{"-version"}, &stdout, &stderr, fixedNow)
+		require.NoError(t, err)
+		assert.NotEmpty(t, strings.TrimSpace(stdout.String()))
+		assert.Empty(t, stderr.String())
+	})
+
+	t.Run("canceled context stops iteration", func(t *testing.T) {
+		canceledCtx, cancel := context.WithCancel(ctx)
+		cancel()
+		var stdout, stderr bytes.Buffer
+		err := run(canceledCtx, []string{"-c", "10", "0 * * * *"}, &stdout, &stderr, fixedNow)
+		assert.ErrorIs(t, err, context.Canceled)
+		assert.Empty(t, stdout.String())
 	})
 
 	t.Run("success cases", func(t *testing.T) {
@@ -45,14 +64,25 @@ func TestRun(t *testing.T) {
 				want:  "2026-06-01 11:00:00\n2026-06-01 12:00:00\n",
 			},
 			{
-				title: "custom time format RFC3339",
+				title: "explicit timezone Asia/Tokyo with RFC3339",
 				args: []string{
+					"-tz", "Asia/Tokyo",
 					"-f", time.RFC3339,
-					"-s", "2026-06-01T10:00:00Z",
+					"-s", "2026-06-01T10:00:00+09:00",
 					"-c", "2",
 					"0 * * * *",
 				},
-				want: "2026-06-01T11:00:00Z\n2026-06-01T12:00:00Z\n",
+				want: "2026-06-01T11:00:00+09:00\n2026-06-01T12:00:00+09:00\n",
+			},
+			{
+				title: "6-field seconds expression",
+				args: []string{
+					"-seconds",
+					"-s", "2026-06-01 10:00:00",
+					"-c", "2",
+					"*/15 * * * * *",
+				},
+				want: "2026-06-01 10:00:15\n2026-06-01 10:00:30\n",
 			},
 			{
 				title: "count 0 outputs empty",
@@ -62,7 +92,7 @@ func TestRun(t *testing.T) {
 		} {
 			t.Run(tc.title, func(t *testing.T) {
 				var stdout, stderr bytes.Buffer
-				err := run(tc.args, &stdout, &stderr, fixedNow)
+				err := run(ctx, tc.args, &stdout, &stderr, fixedNow)
 				require.NoError(t, err)
 				assert.Equal(t, tc.want, stdout.String())
 				assert.Empty(t, stderr.String())
@@ -92,6 +122,11 @@ func TestRun(t *testing.T) {
 				wantErr: "flag provided but not defined",
 			},
 			{
+				title:   "invalid timezone",
+				args:    []string{"-tz", "Invalid/Zone", "-c", "1", "0 * * * *"},
+				wantErr: "load timezone Invalid/Zone",
+			},
+			{
 				title:   "invalid start time",
 				args:    []string{"-s", "not-a-time", "-c", "1", "0 * * * *"},
 				wantErr: "parse time not-a-time",
@@ -107,6 +142,11 @@ func TestRun(t *testing.T) {
 				wantErr: "parse cronexpr invalid",
 			},
 			{
+				title:   "5-field expression with -seconds fails",
+				args:    []string{"-seconds", "-c", "1", "0 * * * *"},
+				wantErr: "parse cronexpr",
+			},
+			{
 				title:   "missing stop condition",
 				args:    []string{"0 * * * *"},
 				wantErr: "validate",
@@ -114,7 +154,7 @@ func TestRun(t *testing.T) {
 		} {
 			t.Run(tc.title, func(t *testing.T) {
 				var stdout, stderr bytes.Buffer
-				err := run(tc.args, &stdout, &stderr, fixedNow)
+				err := run(ctx, tc.args, &stdout, &stderr, fixedNow)
 				require.Error(t, err)
 				assert.True(t, strings.Contains(err.Error(), tc.wantErr), "got %v, want substring %q", err, tc.wantErr)
 			})

@@ -82,4 +82,14 @@ func TestNewNexter(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("with seconds", func(t *testing.T) {
+		nexter, err := cron2date.NewNexterWithSeconds("*/15 * * * * *")
+		require.NoError(t, err)
+		got := nexter.Next(base)
+		assert.Equal(t, time.Date(2026, 1, 1, 0, 0, 15, 0, time.UTC), got)
+
+		_, err = cron2date.NewNexterWithSeconds("0 * * * *")
+		assert.Error(t, err)
+	})
 }

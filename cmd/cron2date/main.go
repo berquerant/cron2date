@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
+	"runtime/debug"
+	"syscall"
 	"time"
 
 	"github.com/berquerant/cron2date/internal/cron2date"
@@ -20,13 +25,36 @@ Usage:
 Flags:`
 
 func main() {
-	if err := run(os.Args[1:], os.Stdout, os.Stderr, time.Now); err != nil {
-		fmt.Fprintf(os.Stderr, "cron2date: %v\n", err)
-		os.Exit(1)
-	}
+	os.Exit(runMain())
 }
 
-func run(args []string, stdout, stderr io.Writer, now func() time.Time) error {
+func runMain() int {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := run(ctx, os.Args[1:], os.Stdout, os.Stderr, time.Now); err != nil {
+		if errors.Is(err, context.Canceled) {
+			return 0
+		}
+		fmt.Fprintf(os.Stderr, "cron2date: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+type cliOptions struct {
+	startString string
+	endString   string
+	count       int
+	duration    time.Duration
+	timeFormat  string
+	timezone    string
+	seconds     bool
+	version     bool
+	cronExpr    string
+}
+
+func parseFlags(args []string, stderr io.Writer) (cliOptions, bool, error) {
 	fs := flag.NewFlagSet("cron2date", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
@@ -34,72 +62,125 @@ func run(args []string, stdout, stderr io.Writer, now func() time.Time) error {
 		fs.PrintDefaults()
 	}
 
-	var (
-		startString = fs.String("s", "", "start time (default current time)")
-		endString   = fs.String("e", "", "end time")
-		count       = fs.Int("c", -1, "firing times to display, negative value is ignored")
-		duration    = fs.Duration(
-			"d",
-			time.Duration(-1),
-			"set the end time to the start time + this duration, negative value is ignored",
-		)
-		timeFormat = fs.String("f", time.DateTime, "time layout")
+	var opts cliOptions
+	fs.StringVar(&opts.startString, "s", "", "start time (default current time)")
+	fs.StringVar(&opts.endString, "e", "", "end time")
+	fs.IntVar(&opts.count, "c", -1, "firing times to display, negative value is ignored")
+	fs.DurationVar(
+		&opts.duration,
+		"d",
+		time.Duration(-1),
+		"set the end time to the start time + this duration, negative value is ignored",
 	)
+	fs.StringVar(&opts.timeFormat, "f", time.DateTime, "time layout")
+	fs.StringVar(&opts.timezone, "tz", "", "timezone name (e.g. UTC, Asia/Tokyo; default local)")
+	fs.BoolVar(&opts.seconds, "seconds", false, "parse 6-field cron expression with leading seconds")
+	fs.BoolVar(&opts.version, "version", false, "print version and exit")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			return nil
+			return opts, true, nil
 		}
-		return err
+		return opts, false, err
+	}
+	if opts.version {
+		return opts, false, nil
 	}
 
 	switch {
 	case fs.NArg() == 0:
-		return errors.New("CRONEXPR is required")
+		return opts, false, errors.New("CRONEXPR is required")
 	case fs.NArg() > 1:
-		return fmt.Errorf("unknown arguments: %v", fs.Args()[1:])
+		return opts, false, fmt.Errorf("unknown arguments: %v", fs.Args()[1:])
 	}
+	opts.cronExpr = fs.Arg(0)
+	return opts, false, nil
+}
 
-	var (
-		cronExpr = fs.Arg(0)
-		loc      = time.Local
-		start    = now().In(loc)
-		end      time.Time
-	)
-	if *startString != "" {
-		t, err := time.ParseInLocation(*timeFormat, *startString, loc)
-		if err != nil {
-			return fmt.Errorf("parse time %s: %w", *startString, err)
-		}
-		start = t
+func buildVersion() string {
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
+		return info.Main.Version
 	}
-	if *endString != "" {
-		t, err := time.ParseInLocation(*timeFormat, *endString, loc)
-		if err != nil {
-			return fmt.Errorf("parse time %s: %w", *endString, err)
-		}
-		end = t
-	}
+	return "(devel)"
+}
 
-	nexter, err := cron2date.NewNexter(cronExpr)
+func resolveLocation(name string) (*time.Location, error) {
+	if name == "" {
+		return time.Local, nil
+	}
+	loc, err := time.LoadLocation(name)
 	if err != nil {
-		return fmt.Errorf("parse cronexpr %s: %w", cronExpr, err)
+		return nil, fmt.Errorf("load timezone %s: %w", name, err)
+	}
+	return loc, nil
+}
+
+func parseTimeOrDefault(s, layout string, loc *time.Location, fallback time.Time) (time.Time, error) {
+	if s == "" {
+		return fallback, nil
+	}
+	t, err := time.ParseInLocation(layout, s, loc)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("parse time %s: %w", s, err)
+	}
+	return t, nil
+}
+
+func newNexter(spec string, withSeconds bool) (cron2date.Nexter, error) {
+	if withSeconds {
+		return cron2date.NewNexterWithSeconds(spec)
+	}
+	return cron2date.NewNexter(spec)
+}
+
+func run(ctx context.Context, args []string, stdout, stderr io.Writer, now func() time.Time) error {
+	opts, helped, err := parseFlags(args, stderr)
+	if err != nil || helped {
+		return err
+	}
+	if opts.version {
+		_, err := fmt.Fprintln(stdout, buildVersion())
+		return err
+	}
+
+	loc, err := resolveLocation(opts.timezone)
+	if err != nil {
+		return err
+	}
+
+	start, err := parseTimeOrDefault(opts.startString, opts.timeFormat, loc, now().In(loc))
+	if err != nil {
+		return err
+	}
+	end, err := parseTimeOrDefault(opts.endString, opts.timeFormat, loc, time.Time{})
+	if err != nil {
+		return err
+	}
+
+	nexter, err := newNexter(opts.cronExpr, opts.seconds)
+	if err != nil {
+		return fmt.Errorf("parse cronexpr %s: %w", opts.cronExpr, err)
 	}
 
 	seq, err := cron2date.NewIterator(nexter, cron2date.Config{
 		Start:    start,
-		Count:    *count,
-		Duration: *duration,
+		Count:    opts.count,
+		Duration: opts.duration,
 		End:      end,
 	})
 	if err != nil {
 		return fmt.Errorf("validate: %w", err)
 	}
 
+	w := bufio.NewWriter(stdout)
 	for x := range seq {
-		if _, err := fmt.Fprintf(stdout, "%s\n", x.Format(*timeFormat)); err != nil {
+		if err := ctx.Err(); err != nil {
+			_ = w.Flush()
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "%s\n", x.Format(opts.timeFormat)); err != nil {
 			return err
 		}
 	}
-	return nil
+	return w.Flush()
 }

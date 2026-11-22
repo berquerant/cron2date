@@ -73,6 +73,20 @@ func TestEndToEnd(t *testing.T) {
 2023-12-01 13:00:00
 `,
 		},
+		{
+			title: "seconds flag",
+			arg:   []string{"-seconds", "-s", "2023-12-01 10:00:00", "-c", "2", "*/30 * * * * *"},
+			want: `2023-12-01 10:00:30
+2023-12-01 10:01:00
+`,
+		},
+		{
+			title: "timezone UTC with RFC3339",
+			arg:   []string{"-tz", "UTC", "-f", time.RFC3339, "-s", "2023-12-01T10:00:00Z", "-c", "2", expr},
+			want: `2023-12-01T11:00:00Z
+2023-12-01T12:00:00Z
+`,
+		},
 	} {
 		t.Run(tc.title, func(t *testing.T) {
 			out, err := outputCmd(bin, tc.arg...)

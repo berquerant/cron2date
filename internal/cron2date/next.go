@@ -19,7 +19,16 @@ func (f NextFunc) Next(t time.Time) time.Time {
 	return f(t)
 }
 
+var secondsParser = cron.NewParser(
+	cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
+)
+
 // NewNexter parses a standard 5-field cron expression or descriptor.
 func NewNexter(spec string) (Nexter, error) {
 	return cron.ParseStandard(spec)
+}
+
+// NewNexterWithSeconds parses a 6-field cron expression (with leading seconds) or descriptor.
+func NewNexterWithSeconds(spec string) (Nexter, error) {
+	return secondsParser.Parse(spec)
 }

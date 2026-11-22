@@ -88,6 +88,28 @@ func TestMCPServer(t *testing.T) {
 		}, out)
 	})
 
+	t.Run("expand_cron with inclusive and format preset", func(t *testing.T) {
+		res, err := session.CallTool(ctx, &mcp.CallToolParams{
+			Name: "expand_cron",
+			Arguments: map[string]any{
+				"expr":      "0 9 * * *",
+				"start":     "2026-06-01T00:00:00Z",
+				"count":     2,
+				"format":    "rfc3339",
+				"timezone":  "Asia/Tokyo",
+				"inclusive": true,
+			},
+		})
+		require.NoError(t, err)
+		assert.False(t, res.IsError)
+		out := decodeStructured[cronmcp.ExpandCronOutput](t, res)
+		assert.Equal(t, []string{
+			"2026-06-01T09:00:00+09:00",
+			"2026-06-02T09:00:00+09:00",
+		}, out.Times)
+		assert.Equal(t, "Asia/Tokyo", out.Timezone)
+	})
+
 	t.Run("expand_cron with seconds and duration", func(t *testing.T) {
 		res, err := session.CallTool(ctx, &mcp.CallToolParams{
 			Name: "expand_cron",

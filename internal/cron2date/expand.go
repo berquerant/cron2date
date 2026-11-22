@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"iter"
 	"runtime/debug"
+	"strings"
 	"time"
 )
 
@@ -31,12 +32,23 @@ func ResolveLocation(name string) (*time.Location, error) {
 	return loc, nil
 }
 
-// ResolveFormat returns format, defaulting to time.DateTime when empty.
+// ResolveFormat expands named layout presets (datetime, date, time, rfc3339, rfc3339nano)
+// and otherwise returns format verbatim as a Go time layout.
 func ResolveFormat(format string) string {
-	if format == "" {
+	switch strings.ToLower(format) {
+	case "", "datetime":
 		return time.DateTime
+	case "date":
+		return time.DateOnly
+	case "time":
+		return time.TimeOnly
+	case "rfc3339":
+		return time.RFC3339
+	case "rfc3339nano":
+		return time.RFC3339Nano
+	default:
+		return format
 	}
-	return format
 }
 
 // ParseTimeOrDefault parses s in layout and loc, returning fallback when s is empty.
@@ -51,6 +63,19 @@ func ParseTimeOrDefault(s, layout string, loc *time.Location, fallback time.Time
 	return t, nil
 }
 
+// ParseStartTime parses s in layout and loc, normalizing the resulting timestamp into loc
+// when explicitTZ is true so cron evaluation uses the requested timezone even if s includes an offset.
+func ParseStartTime(s, layout string, loc *time.Location, explicitTZ bool, fallback time.Time) (time.Time, error) {
+	t, err := ParseTimeOrDefault(s, layout, loc, fallback)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if explicitTZ {
+		t = t.In(loc)
+	}
+	return t, nil
+}
+
 // ParseNexter parses spec as a 5-field standard cron expression or a 6-field seconds expression.
 func ParseNexter(spec string, seconds bool) (Nexter, error) {
 	if seconds {
@@ -61,14 +86,15 @@ func ParseNexter(spec string, seconds bool) (Nexter, error) {
 
 // ExpandParams holds common expansion parameters shared by CLI and MCP adapters.
 type ExpandParams struct {
-	Expr     string
-	Start    string
-	End      string
-	Count    int           // negative value is ignored
-	Duration time.Duration // negative value is ignored
-	Format   string
-	Timezone string
-	Seconds  bool
+	Expr      string
+	Start     string
+	End       string
+	Count     int           // negative value is ignored
+	Duration  time.Duration // negative value is ignored
+	Format    string
+	Timezone  string
+	Seconds   bool
+	Inclusive bool
 }
 
 // PreparedExpand holds the validated iterator and resolved formatting/location settings.
@@ -93,7 +119,7 @@ func PrepareExpand(params ExpandParams, now func() time.Time) (PreparedExpand, e
 	}
 	layout := ResolveFormat(params.Format)
 
-	start, err := ParseTimeOrDefault(params.Start, layout, loc, now().In(loc))
+	start, err := ParseStartTime(params.Start, layout, loc, params.Timezone != "", now().In(loc))
 	if err != nil {
 		return PreparedExpand{}, err
 	}
@@ -108,10 +134,11 @@ func PrepareExpand(params ExpandParams, now func() time.Time) (PreparedExpand, e
 	}
 
 	seq, err := NewIterator(nexter, Config{
-		Start:    start,
-		Count:    params.Count,
-		Duration: params.Duration,
-		End:      end,
+		Start:     start,
+		Count:     params.Count,
+		Duration:  params.Duration,
+		End:       end,
+		Inclusive: params.Inclusive,
 	})
 	if err != nil {
 		return PreparedExpand{}, fmt.Errorf("validate: %w", err)

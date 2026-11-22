@@ -21,7 +21,7 @@ const usage = `cron2date - expand cron expression
 Usage:
 
   cron2date [flags] CRONEXPR
-  cron2date -mcp
+  cron2date -mcp [-mcp-max-results N]
 
 Flags:`
 
@@ -44,9 +44,38 @@ func runMain() int {
 }
 
 type cliOptions struct {
-	params  cron2date.ExpandParams
-	version bool
-	mcpMode bool
+	params        cron2date.ExpandParams
+	version       bool
+	mcpMode       bool
+	mcpMaxResults int
+}
+
+func validateFlagCombination(opts cliOptions, visited map[string]bool, args []string) error {
+	if opts.mcpMode {
+		if len(args) > 0 {
+			return fmt.Errorf("unknown arguments: %v", args)
+		}
+		for _, name := range []string{"s", "e", "c", "d", "f", "tz", "seconds", "inclusive"} {
+			if visited[name] {
+				return fmt.Errorf("flag -%s cannot be used with -mcp", name)
+			}
+		}
+		if opts.mcpMaxResults <= 0 {
+			return errors.New("mcp-max-results must be positive")
+		}
+		return nil
+	}
+
+	if visited["mcp-max-results"] {
+		return errors.New("flag -mcp-max-results requires -mcp")
+	}
+	switch {
+	case len(args) == 0:
+		return errors.New("CRONEXPR is required")
+	case len(args) > 1:
+		return fmt.Errorf("unknown arguments: %v", args[1:])
+	}
+	return nil
 }
 
 func parseFlags(args []string, stderr io.Writer) (cliOptions, bool, error) {
@@ -67,10 +96,22 @@ func parseFlags(args []string, stderr io.Writer) (cliOptions, bool, error) {
 		time.Duration(-1),
 		"set the end time to the start time + this duration, negative value is ignored",
 	)
-	fs.StringVar(&opts.params.Format, "f", time.DateTime, "time layout")
+	fs.StringVar(
+		&opts.params.Format,
+		"f",
+		time.DateTime,
+		"time layout or preset (datetime, date, time, rfc3339, rfc3339nano)",
+	)
 	fs.StringVar(&opts.params.Timezone, "tz", "", "timezone name (e.g. UTC, Asia/Tokyo; default local)")
 	fs.BoolVar(&opts.params.Seconds, "seconds", false, "parse 6-field cron expression with leading seconds")
+	fs.BoolVar(&opts.params.Inclusive, "inclusive", false, "include start time if it matches CRONEXPR")
 	fs.BoolVar(&opts.mcpMode, "mcp", false, "run as an MCP server over stdio")
+	fs.IntVar(
+		&opts.mcpMaxResults,
+		"mcp-max-results",
+		cronmcp.DefaultMaxResults,
+		"maximum results per MCP expand_cron call (requires -mcp)",
+	)
 	fs.BoolVar(&opts.version, "version", false, "print version and exit")
 
 	if err := fs.Parse(args); err != nil {
@@ -82,20 +123,16 @@ func parseFlags(args []string, stderr io.Writer) (cliOptions, bool, error) {
 	if opts.version {
 		return opts, false, nil
 	}
-	if opts.mcpMode {
-		if fs.NArg() > 0 {
-			return opts, false, fmt.Errorf("unknown arguments: %v", fs.Args())
-		}
-		return opts, false, nil
-	}
 
-	switch {
-	case fs.NArg() == 0:
-		return opts, false, errors.New("CRONEXPR is required")
-	case fs.NArg() > 1:
-		return opts, false, fmt.Errorf("unknown arguments: %v", fs.Args()[1:])
+	visited := make(map[string]bool)
+	fs.Visit(func(f *flag.Flag) { visited[f.Name] = true })
+
+	if err := validateFlagCombination(opts, visited, fs.Args()); err != nil {
+		return opts, false, err
 	}
-	opts.params.Expr = fs.Arg(0)
+	if !opts.mcpMode {
+		opts.params.Expr = fs.Arg(0)
+	}
 	return opts, false, nil
 }
 
@@ -110,8 +147,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, now func(
 	}
 	if opts.mcpMode {
 		return cronmcp.RunStdio(ctx, cronmcp.Options{
-			Version: cron2date.BuildVersion(),
-			Now:     now,
+			Version:    cron2date.BuildVersion(),
+			MaxResults: opts.mcpMaxResults,
+			Now:        now,
 		})
 	}
 

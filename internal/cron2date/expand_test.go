@@ -19,6 +19,36 @@ func TestPrepareExpand(t *testing.T) {
 		assert.NotEmpty(t, cron2date.BuildVersion())
 	})
 
+	t.Run("format presets", func(t *testing.T) {
+		assert.Equal(t, time.DateTime, cron2date.ResolveFormat(""))
+		assert.Equal(t, time.DateTime, cron2date.ResolveFormat("datetime"))
+		assert.Equal(t, time.DateOnly, cron2date.ResolveFormat("DATE"))
+		assert.Equal(t, time.TimeOnly, cron2date.ResolveFormat("time"))
+		assert.Equal(t, time.RFC3339, cron2date.ResolveFormat("rfc3339"))
+		assert.Equal(t, time.RFC3339Nano, cron2date.ResolveFormat("RFC3339Nano"))
+		assert.Equal(t, "2006/01/02", cron2date.ResolveFormat("2006/01/02"))
+	})
+
+	t.Run("explicit timezone normalizes offset-bearing start time", func(t *testing.T) {
+		// Start is 2026-06-01T00:00:00Z (= 09:00 JST).
+		// With timezone=Asia/Tokyo and "0 9 * * *", cron must evaluate in Asia/Tokyo (09:00 JST),
+		// not UTC (09:00 UTC = 18:00 JST).
+		prepared, err := cron2date.PrepareExpand(cron2date.ExpandParams{
+			Expr:      "0 9 * * *",
+			Start:     "2026-06-01T00:00:00Z",
+			Count:     2,
+			Duration:  -1,
+			Format:    "rfc3339",
+			Timezone:  "Asia/Tokyo",
+			Inclusive: true,
+		}, fixedNow)
+		require.NoError(t, err)
+		got := slices.Collect(prepared.Seq)
+		require.Len(t, got, 2)
+		assert.Equal(t, "2026-06-01T09:00:00+09:00", got[0].In(prepared.Location).Format(prepared.Format))
+		assert.Equal(t, "2026-06-02T09:00:00+09:00", got[1].In(prepared.Location).Format(prepared.Format))
+	})
+
 	t.Run("success with defaults and options", func(t *testing.T) {
 		prepared, err := cron2date.PrepareExpand(cron2date.ExpandParams{
 			Expr:     "0 * * * *",

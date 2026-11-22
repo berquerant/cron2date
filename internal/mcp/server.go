@@ -23,14 +23,15 @@ type Options struct {
 
 // ExpandCronInput defines the parameters for the expand_cron tool.
 type ExpandCronInput struct {
-	Expr     string `json:"expr" jsonschema:"Cron expression (5-field standard, descriptor, or 6-field with seconds=true)"`
-	Start    string `json:"start,omitempty" jsonschema:"Start timestamp in format (default: current time)"`
-	End      string `json:"end,omitempty" jsonschema:"End timestamp in format"`
-	Count    *int   `json:"count,omitempty" jsonschema:"Maximum number of firing times to return (0 or greater)"`
-	Duration string `json:"duration,omitempty" jsonschema:"Duration from start time (Go duration, e.g. 24h, 3h30m)"`
-	Format   string `json:"format,omitempty" jsonschema:"Go time layout (default: 2006-01-02 15:04:05)"`
-	Timezone string `json:"timezone,omitempty" jsonschema:"IANA timezone name (e.g. UTC, Asia/Tokyo; default: local)"`
-	Seconds  bool   `json:"seconds,omitempty" jsonschema:"Parse 6-field cron expression with leading seconds field"`
+	Expr      string `json:"expr" jsonschema:"Cron expression (5-field, descriptor, or 6-field with seconds=true)"`
+	Start     string `json:"start,omitempty" jsonschema:"Start timestamp in format (default: current time)"`
+	End       string `json:"end,omitempty" jsonschema:"End timestamp in format"`
+	Count     *int   `json:"count,omitempty" jsonschema:"Maximum number of firing times to return (0 or greater)"`
+	Duration  string `json:"duration,omitempty" jsonschema:"Duration from start time (Go duration, e.g. 24h, 3h30m)"`
+	Format    string `json:"format,omitempty" jsonschema:"Layout or preset (datetime, date, time, rfc3339, rfc3339nano)"`
+	Timezone  string `json:"timezone,omitempty" jsonschema:"IANA timezone name (e.g. UTC, Asia/Tokyo; default: local)"`
+	Seconds   bool   `json:"seconds,omitempty" jsonschema:"Parse 6-field cron expression with leading seconds field"`
+	Inclusive bool   `json:"inclusive,omitempty" jsonschema:"Include start timestamp if it matches the cron expression"`
 }
 
 // ExpandCronOutput defines the structured response for the expand_cron tool.
@@ -45,7 +46,7 @@ type ExpandCronOutput struct {
 type ValidateCronInput struct {
 	Expr     string `json:"expr" jsonschema:"Cron expression to validate"`
 	Start    string `json:"start,omitempty" jsonschema:"Reference timestamp for next firing preview (default: now)"`
-	Format   string `json:"format,omitempty" jsonschema:"Go time layout (default: 2006-01-02 15:04:05)"`
+	Format   string `json:"format,omitempty" jsonschema:"Go layout or preset (datetime, date, time, rfc3339, rfc3339nano)"`
 	Timezone string `json:"timezone,omitempty" jsonschema:"IANA timezone name (e.g. UTC, Asia/Tokyo; default: local)"`
 	Seconds  bool   `json:"seconds,omitempty" jsonschema:"Validate as a 6-field cron expression with leading seconds"`
 }
@@ -117,14 +118,15 @@ type handlers struct {
 
 func toExpandParams(in ExpandCronInput) (cron2date.ExpandParams, error) {
 	params := cron2date.ExpandParams{
-		Expr:     in.Expr,
-		Start:    in.Start,
-		End:      in.End,
-		Count:    -1,
-		Duration: -1,
-		Format:   in.Format,
-		Timezone: in.Timezone,
-		Seconds:  in.Seconds,
+		Expr:      in.Expr,
+		Start:     in.Start,
+		End:       in.End,
+		Count:     -1,
+		Duration:  -1,
+		Format:    in.Format,
+		Timezone:  in.Timezone,
+		Seconds:   in.Seconds,
+		Inclusive: in.Inclusive,
 	}
 
 	if in.Count != nil {
@@ -195,7 +197,7 @@ func (h *handlers) validateCron(
 	}
 	layout := cron2date.ResolveFormat(in.Format)
 
-	start, err := cron2date.ParseTimeOrDefault(in.Start, layout, loc, h.now().In(loc))
+	start, err := cron2date.ParseStartTime(in.Start, layout, loc, in.Timezone != "", h.now().In(loc))
 	if err != nil {
 		return nil, ValidateCronOutput{}, err
 	}

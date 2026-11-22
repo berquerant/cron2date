@@ -85,6 +85,18 @@ func TestRun(t *testing.T) {
 				want: "2026-06-01 10:00:15\n2026-06-01 10:00:30\n",
 			},
 			{
+				title: "inclusive start with rfc3339 preset and explicit tz",
+				args: []string{
+					"-inclusive",
+					"-tz", "Asia/Tokyo",
+					"-f", "rfc3339",
+					"-s", "2026-06-01T00:00:00Z",
+					"-c", "2",
+					"0 9 * * *",
+				},
+				want: "2026-06-01T09:00:00+09:00\n2026-06-02T09:00:00+09:00\n",
+			},
+			{
 				title: "count 0 outputs empty",
 				args:  []string{"-c", "0", "0 * * * *"},
 				want:  "",
@@ -155,6 +167,21 @@ func TestRun(t *testing.T) {
 				title:   "mcp mode rejects positional arguments",
 				args:    []string{"-mcp", "extra"},
 				wantErr: "unknown arguments",
+			},
+			{
+				title:   "mcp mode rejects CLI flags",
+				args:    []string{"-mcp", "-c", "5"},
+				wantErr: "flag -c cannot be used with -mcp",
+			},
+			{
+				title:   "mcp mode rejects non-positive max results",
+				args:    []string{"-mcp", "-mcp-max-results", "0"},
+				wantErr: "mcp-max-results must be positive",
+			},
+			{
+				title:   "mcp-max-results requires -mcp",
+				args:    []string{"-mcp-max-results", "50", "-c", "1", "0 * * * *"},
+				wantErr: "flag -mcp-max-results requires -mcp",
 			},
 		} {
 			t.Run(tc.title, func(t *testing.T) {

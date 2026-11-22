@@ -151,6 +151,86 @@ func TestIterator(t *testing.T) {
 		})
 	})
 
+	t.Run("inclusive start", func(t *testing.T) {
+		hourly, err := cron2date.NewNexter("0 * * * *")
+		require.NoError(t, err)
+
+		for _, tc := range []struct {
+			title string
+			cfg   cron2date.Config
+			want  []time.Time
+		}{
+			{
+				title: "exact match included with count",
+				cfg: cron2date.Config{
+					Start:     year2000,
+					Count:     3,
+					Duration:  -1,
+					Inclusive: true,
+				},
+				want: []time.Time{
+					year2000,
+					year2000.Add(time.Hour),
+					year2000.Add(2 * time.Hour),
+				},
+			},
+			{
+				title: "count 0 yields empty",
+				cfg: cron2date.Config{
+					Start:     year2000,
+					Count:     0,
+					Duration:  -1,
+					Inclusive: true,
+				},
+			},
+			{
+				title: "end equals matching start yields start",
+				cfg: cron2date.Config{
+					Start:     year2000,
+					Count:     -1,
+					Duration:  -1,
+					End:       year2000,
+					Inclusive: true,
+				},
+				want: []time.Time{year2000},
+			},
+			{
+				title: "end before start yields empty",
+				cfg: cron2date.Config{
+					Start:     year2000,
+					Count:     -1,
+					Duration:  -1,
+					End:       year2000.Add(-time.Minute),
+					Inclusive: true,
+				},
+			},
+			{
+				title: "non-matching start is skipped",
+				cfg: cron2date.Config{
+					Start:     year2000.Add(5 * time.Minute),
+					Count:     2,
+					Duration:  -1,
+					Inclusive: true,
+				},
+				want: []time.Time{
+					year2000.Add(time.Hour),
+					year2000.Add(2 * time.Hour),
+				},
+			},
+		} {
+			t.Run(tc.title, func(t *testing.T) {
+				seq, err := cron2date.NewIterator(hourly, tc.cfg)
+				require.NoError(t, err)
+				got := slices.Collect(seq)
+				if len(tc.want) == 0 {
+					assert.Empty(t, got)
+					return
+				}
+				assert.Equal(t, tc.want, got)
+			})
+		}
+	})
+
 	t.Run("Validate", func(t *testing.T) {
 		for _, tc := range []struct {
 			title  string

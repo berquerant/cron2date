@@ -151,6 +151,11 @@ func TestRun(t *testing.T) {
 				args:    []string{"0 * * * *"},
 				wantErr: "validate",
 			},
+			{
+				title:   "mcp mode rejects positional arguments",
+				args:    []string{"-mcp", "extra"},
+				wantErr: "unknown arguments",
+			},
 		} {
 			t.Run(tc.title, func(t *testing.T) {
 				var stdout, stderr bytes.Buffer

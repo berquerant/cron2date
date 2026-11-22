@@ -27,6 +27,8 @@ Flags:
     	end time
   -f string
     	time layout (default "2006-01-02 15:04:05")
+  -mcp
+    	run as an MCP server over stdio
   -s string
     	start time (default current time)
   -seconds
@@ -55,6 +57,26 @@ cron2date -seconds -s "2026-06-01 10:00:00" -c 3 "*/15 * * * * *"
 # Descriptors and CRON_TZ prefix (supported via robfig/cron/v3)
 cron2date -c 3 "@daily"
 cron2date -c 3 "CRON_TZ=UTC 0 0 * * *"
+```
+
+## MCP Server
+
+Run `cron2date -mcp` to start a stdio MCP server exposing two read-only tools:
+
+- `expand_cron`: expand a cron expression into concrete firing timestamps (capped at 1000 results per call).
+- `validate_cron`: validate a cron expression and preview its next firing timestamp.
+
+Example MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "cron2date": {
+      "command": "cron2date",
+      "args": ["-mcp"]
+    }
+  }
+}
 ```
 
 ## License

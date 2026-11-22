@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -94,6 +96,34 @@ func TestEndToEnd(t *testing.T) {
 			assert.Equal(t, tc.want, out)
 		})
 	}
+
+	t.Run("mcp stdio server", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		client := mcp.NewClient(&mcp.Implementation{Name: "e2e-client", Version: "0.1.0"}, nil)
+		session, err := client.Connect(ctx, &mcp.CommandTransport{
+			Command: exec.CommandContext(ctx, bin, "-mcp"),
+		}, nil)
+		require.NoError(t, err)
+		defer func() { _ = session.Close() }()
+
+		tools, err := session.ListTools(ctx, &mcp.ListToolsParams{})
+		require.NoError(t, err)
+		assert.Len(t, tools.Tools, 2)
+
+		res, err := session.CallTool(ctx, &mcp.CallToolParams{
+			Name: "expand_cron",
+			Arguments: map[string]any{
+				"expr":     expr,
+				"start":    "2023-12-01 10:00:00",
+				"count":    2,
+				"timezone": "UTC",
+			},
+		})
+		require.NoError(t, err)
+		assert.False(t, res.IsError)
+	})
 }
 
 func outputCmd(name string, arg ...string) (string, error) {

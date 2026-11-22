@@ -24,6 +24,10 @@ init:
 vet:
 	go vet ./...
 
+.PHONY: lint
+lint:
+	go tool golangci-lint run ./...
+
 .PHONY: clean
 clean:
 	rm -rf dist

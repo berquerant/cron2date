@@ -9,33 +9,32 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEndToEnd(t *testing.T) {
-	e := newExecutor(t)
-	defer e.close()
+	bin := buildBinary(t)
 
 	t.Run("help", func(t *testing.T) {
-		assert.Nil(t, run(e.cmd, "-h"))
+		assert.NoError(t, runCmd(bin, "-h"))
 	})
 
 	const expr = "0 * * * *"
 
 	t.Run("expected lines without start", func(t *testing.T) {
-		out, err := output(e.cmd, "-c", "10", expr)
-		assert.Nil(t, err)
+		out, err := outputCmd(bin, "-c", "10", expr)
+		require.NoError(t, err)
 		assert.Equal(t, 10, strings.Count(out, "\n"), out)
 	})
 
 	t.Run("end without start uses local timezone consistently", func(t *testing.T) {
 		jst := time.FixedZone("Asia/Tokyo", 9*3600)
 		endStr := time.Now().In(jst).Add(2*time.Hour + 30*time.Minute).Format(time.DateTime)
-		cmd := exec.Command(e.cmd, "-e", endStr, expr)
+		cmd := exec.Command(bin, "-e", endStr, expr)
 		cmd.Env = append(os.Environ(), "TZ=Asia/Tokyo")
 		b, err := cmd.Output()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		lines := strings.Count(string(b), "\n")
-		// Within 2h30m, hourly cron ("0 * * * *") fires 2 or 3 times (not 11-12 times as with UTC mismatch).
 		assert.GreaterOrEqual(t, lines, 2, string(b))
 		assert.LessOrEqual(t, lines, 3, string(b))
 	})
@@ -76,19 +75,19 @@ func TestEndToEnd(t *testing.T) {
 		},
 	} {
 		t.Run(tc.title, func(t *testing.T) {
-			out, err := output(e.cmd, tc.arg...)
-			assert.Nil(t, err)
+			out, err := outputCmd(bin, tc.arg...)
+			require.NoError(t, err)
 			assert.Equal(t, tc.want, out)
 		})
 	}
 }
 
-func output(name string, arg ...string) (string, error) {
+func outputCmd(name string, arg ...string) (string, error) {
 	b, err := exec.Command(name, arg...).Output()
 	return string(b), err
 }
 
-func run(name string, arg ...string) error {
+func runCmd(name string, arg ...string) error {
 	cmd := exec.Command(name, arg...)
 	cmd.Dir = "."
 	cmd.Stdout = os.Stdout
@@ -96,33 +95,11 @@ func run(name string, arg ...string) error {
 	return cmd.Run()
 }
 
-type executor struct {
-	dir string
-	cmd string
-}
-
-func newExecutor(t *testing.T) *executor {
+func buildBinary(t *testing.T) string {
 	t.Helper()
-	e := &executor{}
-	e.init(t)
-	return e
-}
-
-func (e *executor) init(t *testing.T) {
-	t.Helper()
-	dir, err := os.MkdirTemp("", "cron2date")
-	if err != nil {
+	bin := filepath.Join(t.TempDir(), "cron2date")
+	if err := runCmd("go", "build", "-o", bin); err != nil {
 		t.Fatal(err)
 	}
-	cmd := filepath.Join(dir, "cron2date")
-	// build cron2date command
-	if err := run("go", "build", "-o", cmd); err != nil {
-		t.Fatal(err)
-	}
-	e.dir = dir
-	e.cmd = cmd
-}
-
-func (e *executor) close() {
-	os.RemoveAll(e.dir)
+	return bin
 }

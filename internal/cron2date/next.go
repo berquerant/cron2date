@@ -3,7 +3,7 @@ package cron2date
 import (
 	"time"
 
-	"github.com/robfig/cron"
+	"github.com/robfig/cron/v3"
 )
 
 // Nexter computes the next firing time after a given timestamp.

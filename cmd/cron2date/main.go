@@ -1,9 +1,10 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
-	"log"
+	"io"
 	"os"
 	"time"
 
@@ -18,59 +19,72 @@ Usage:
 
 Flags:`
 
-func Usage() {
-	fmt.Fprintln(os.Stderr, usage)
-	flag.PrintDefaults()
-}
-
-func fail(err error, msg string, v ...any) {
-	if err != nil {
-		log.Fatalf("%s, %v", fmt.Sprintf(msg, v...), err)
+func main() {
+	if err := run(os.Args[1:], os.Stdout, os.Stderr, time.Now); err != nil {
+		fmt.Fprintf(os.Stderr, "cron2date: %v\n", err)
+		os.Exit(1)
 	}
 }
 
-func main() {
+func run(args []string, stdout, stderr io.Writer, now func() time.Time) error {
+	fs := flag.NewFlagSet("cron2date", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		_, _ = fmt.Fprintln(stderr, usage)
+		fs.PrintDefaults()
+	}
+
 	var (
-		startString = flag.String("s", "", "start time (default current time)")
-		endString   = flag.String("e", "", "end time")
-		count       = flag.Int("c", -1, "firing times to display, negative value is ignored")
-		duration    = flag.Duration("d", time.Duration(-1), "set the end time to the start time + this duration, negative value is ignored")
-		timeFormat  = flag.String("f", time.DateTime, "time layout")
+		startString = fs.String("s", "", "start time (default current time)")
+		endString   = fs.String("e", "", "end time")
+		count       = fs.Int("c", -1, "firing times to display, negative value is ignored")
+		duration    = fs.Duration(
+			"d",
+			time.Duration(-1),
+			"set the end time to the start time + this duration, negative value is ignored",
+		)
+		timeFormat = fs.String("f", time.DateTime, "time layout")
 	)
 
-	log.SetFlags(0)
-	log.SetPrefix("cron2date: ")
-
-	flag.Usage = Usage
-	flag.Parse()
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
 
 	switch {
-	case flag.NArg() == 0:
-		log.Fatal("CRONEXPR is required")
-	case flag.NArg() > 1:
-		log.Fatalf("unknown arguments: %v", flag.Args()[1:])
+	case fs.NArg() == 0:
+		return errors.New("CRONEXPR is required")
+	case fs.NArg() > 1:
+		return fmt.Errorf("unknown arguments: %v", fs.Args()[1:])
 	}
 
 	var (
-		cronExpr  = flag.Arg(0)
-		loc       = time.Local
-		start     = time.Now().In(loc)
-		end       time.Time
-		parseTime = func(s string) time.Time {
-			t, err := time.ParseInLocation(*timeFormat, s, loc)
-			fail(err, "parse time %s", s)
-			return t
-		}
+		cronExpr = fs.Arg(0)
+		loc      = time.Local
+		start    = now().In(loc)
+		end      time.Time
 	)
 	if *startString != "" {
-		start = parseTime(*startString)
+		t, err := time.ParseInLocation(*timeFormat, *startString, loc)
+		if err != nil {
+			return fmt.Errorf("parse time %s: %w", *startString, err)
+		}
+		start = t
 	}
 	if *endString != "" {
-		end = parseTime(*endString)
+		t, err := time.ParseInLocation(*timeFormat, *endString, loc)
+		if err != nil {
+			return fmt.Errorf("parse time %s: %w", *endString, err)
+		}
+		end = t
 	}
 
 	nexter, err := cron2date.NewNexter(cronExpr)
-	fail(err, "parse cronexpr %s", cronExpr)
+	if err != nil {
+		return fmt.Errorf("parse cronexpr %s: %w", cronExpr, err)
+	}
 
 	seq, err := cron2date.NewIterator(nexter, cron2date.Config{
 		Start:    start,
@@ -78,9 +92,14 @@ func main() {
 		Duration: *duration,
 		End:      end,
 	})
-	fail(err, "validate")
+	if err != nil {
+		return fmt.Errorf("validate: %w", err)
+	}
 
 	for x := range seq {
-		fmt.Printf("%s\n", x.Format(*timeFormat))
+		if _, err := fmt.Fprintf(stdout, "%s\n", x.Format(*timeFormat)); err != nil {
+			return err
+		}
 	}
+	return nil
 }

@@ -24,8 +24,12 @@ init:
 vet:
 	go vet ./...
 
+.PHONY: fix-diff
+fix-diff:
+	go fix -diff ./...
+
 .PHONY: lint
-lint:
+lint: vet fix-diff
 	go tool golangci-lint run ./...
 
 .PHONY: clean

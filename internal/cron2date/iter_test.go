@@ -112,11 +112,9 @@ func TestIterator(t *testing.T) {
 		// Concurrent iteration must be race-free
 		var wg sync.WaitGroup
 		for range 8 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				assert.Equal(t, want, slices.Collect(seq))
-			}()
+			})
 		}
 		wg.Wait()
 	})
